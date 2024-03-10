@@ -1,0 +1,15 @@
+#lang racket
+
+(require csv-reading)
+
+(define make-sales-csv-reader
+  (make-sales-csv-reader
+	'((seperator-chars #\|)
+	  (strip-leading-whitespace? . #t)
+	  (strip-trailing-whitespace? . #t))))
+
+
+(define next-row
+  (make-food-csv-reader(open-input-file "sales.csv"))
+
+

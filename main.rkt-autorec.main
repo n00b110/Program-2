@@ -1,0 +1,7 @@
+#lang racket
+
+(require csv-reading)
+
+(call-with-input-file "sales.csv" csv->list)
+
+
