@@ -1,157 +1,116 @@
 #lang racket
 
+
 (require csv-reading)
+(require data/maybe)
 
-; Load the data set from a CSV file
-(define data (call-with-input-file "sales.csv" csv->list))
+(define (display-and-read prompt)
+  (display prompt)
+  (display prompt)
+  (read-line (current-input-port) 'any))
 
-; Helper functions for filtering and sorting
-(define (filter-by-name data game-name)
-  (filter (lambda (row)
-            (regexp-match? (regexp (string-ci=? game-name))
-                           (string-ci=? (list-ref row 2))))
-          data))
+(define (sort-by-rating games)
+  (sort games (lambda (a b) (string>? (list-ref a 12) (list-ref b 12)))))
 
-(define (filter-by-date data start-year end-year)
-  (filter (lambda (row)
-            (let ([year (string->number (list-ref row 4))])
-              (displayln year)
-              (and (>= year start-year)
-                   (<= year end-year))))
-          data))
+(define (display-entry index entry)
+  (fprintf (current-output-port) "~a. ~a - ~a MiLlion globally~n North America - ~a million~n Europe - ~a million~n Japan - ~a million~n Rest of World - ~a million~n~n"
+           (add1 index)
+           (third entry)
+           (second (reverse entry))
+           (eighth entry)
+           (ninth entry)
+           (tenth entry)
+           (list-ref entry 10)))
 
-(define (filter-by-publisher data publisher)
-  (filter (lambda (row)
-            (regexp-match? (regexp (string-ci=? publisher))
-                           (string-ci=? (list-ref row 6))))
-          data))
+(define (display-sorted-by-sales games region)
+  (for ([entry games])
+    (display-entry (index-of games entry) entry)))
 
-(define (filter-by-region data region)
-  (filter (lambda (row)
-            (case region
-              ['north-america (> (string->number (list-ref row 7)) 0)]
-              ['europe (> (string->number (list-ref row 8)) 0)]
-              ['japan (> (string->number (list-ref row 9)) 0)]
-              ['rest-of-world (> (string->number (list-ref row 10)) 0)]
-              ['global (> (string->number (list-ref row 11)) 0)]))
-          data))
+(define (display-sorted-by-rating games region)
+  (for ([entry (sort-by-rating games)])
+    (fprintf (current-output-port) "~a. ~a - Rating: ~a/100~n" 
+             (add1 (index-of (sort-by-rating games) entry))
+             (third entry)
+             (last entry))
+    (fprintf (current-output-port) "Sales, ")
+    (if (null? region)
+        (fprintf (current-output-port) "Global - ~a million~n Platform - ~a~n Year - ~a~n Genre - ~a~n~n" (second (reverse entry)) (fourth entry) (fifth entry) (sixth entry))
+        (fprintf (current-output-port) "~a - ~a million~n Platform - ~a~n Year - ~a~n Genre - ~a~n~n" (first region) (list-ref entry (second region)) (fourth entry) (fifth entry) (sixth entry)))))
 
-(define (filter-by-genre data genre)
-  (filter (lambda (row)
-            (string-ci=? genre (list-ref row 5)))
-          data))
+(define (get-region-index region)
+  (cond [(equal? region "North America") 7]
+        [(equal? region "Europe") 8]
+        [(equal? region "Japan") 9]
+        [(equal? region "Rest of World") 10]))
 
-(define (sort-by-rank data)
-  (sort data < #:key (lambda (row) (string->number (list-ref row 1)))))
+(define (filter-by-name games name)
+  (filter (lambda (n) (string-contains? (string-foldcase (caddr n)) (string-foldcase name))) games))
 
-(define (sort-by-review data)
-  (sort data > #:key (lambda (row) (string->number (list-ref row 12)))))
+(define (filter-by-date games date-range)
+  (filter (lambda (n) (and (string>=? (car (cddddr n)) (first date-range))
+                           (string<=? (car (cddddr n)) (second date-range))))
+          games))
 
-; Menu function
+(define (filter-by-publisher games publisher)
+  (filter (lambda (n) (string-ci=? (caddr (cddddr n)) publisher)) games))
+
+(define (filter-by-region games region)
+  (filter (lambda (n) (string-ci=? (caddr n) region)) games))
+
+(define (filter-by-genre games genre)
+  (filter (lambda (n) (string-ci=? (cadr (cddddr n)) genre)) games))
+
+(define (get-date-range)
+  (list (display-and-read "Enter starting year YYYY (min: 1983): ")
+        (display-and-read "Enter ending year YYYY (max: 2018): ")))
+
+(define (region-search region)
+  (list region (get-region-index region)))
+
+(define (display-filtered games [region '()])
+  (display "Would you like to order by sales or rating?:\nS) - Sales\nR) - Rating\n")
+  (let ([sort-by (display-and-read "")])
+    (cond
+     [(string-ci=? sort-by "S") (display-sorted-by-sales games region)]
+     [(string-ci=? sort-by "R") (display-sorted-by-rating games region)]
+     [else (displayln "Invalid!") (display-filtered games)])))
+
 (define (menu)
-  (printf "Enter up to 3 search criteria (or 'q' to quit):\n")
-  (let loop ([criteria '()])
-    (cond
-      [(= (length criteria) 3) criteria]
-      [else
-       (printf "~a. Enter 'name', 'date', 'publisher', 'region', or 'genre' (or 'q' to quit): " (add1 (length criteria)))
-       (let ([choice (string->symbol (read-line))])
-         (cond
-           [(eq? choice 'q) criteria]
-           [(member choice '(name date publisher region genre)) (loop (cons choice criteria))]
-           [else (printf "Invalid choice. Please try again.\n")
-                 (loop criteria)]))])))
+  (let loop ([search-criteria '()])
+    (if (equal? (length search-criteria) 6) search-criteria 
+    (let ([search (display-and-read "Select a criteria to be searched:\nN) - Name\nD) - Date Range\nP) - Publisher (e.g. Nintendo)\nR) - Region\nG) - Genre\nS) - Search or Quit\n")])
+      (cond
+        [(string-ci=? search "N") (loop (append search-criteria (list "Name" (display-and-read "Enter the name of the game:\n"))))]
+        [(string-ci=? search "D") (loop (append search-criteria (list "Date" (get-date-range))))]
+        [(string-ci=? search "P") (loop (append search-criteria (list "Publisher" (display-and-read "Enter the name of the Publisher:\n"))))]
+        [(string-ci=? search "R") (loop (append search-criteria (list "Region" (region-search (display-and-read "Enter the region:\n")))))]
+        [(string-ci=? search "G") (loop (append search-criteria (list "Genre" (display-and-read "Enter the genre:\n"))))]
+        [(string-ci=? search "S") (display "Searching...") search-criteria]
+        [else (displayln "Invalid entry") (loop (search-criteria))])))))
 
-; Filter data based on user input
-(define (filter-data criteria)
-  (let loop ([criteria criteria] [filtered-data data])
-    (cond
-      [(null? criteria) filtered-data]
-      [else
-       (case (car criteria)
-         ['name
-          (let ([game-name (read-line)])
-            (loop (cdr criteria)
-                  (filter-by-name filtered-data game-name)))]
-         ['date
-          (printf "Enter the start year: ")
-          (let ([start-year (string->number (read-line))])
-            (printf "Enter the end year: ")
-            (let ([end-year (string->number (read-line))])
-              (if (> start-year end-year)
-                  (loop (cdr criteria)
-                        (filter-by-date filtered-data end-year start-year))
-                  (loop (cdr criteria)
-                        (filter-by-date filtered-data start-year end-year)))))]
-         ['publisher
-          (let ([publisher (read-line)])
-            (loop (cdr criteria)
-                  (filter-by-publisher filtered-data publisher)))]
-         ['region
-          (printf "Enter the region (north-america, europe, japan, rest-of-world, or global): ")
-          (let ([region (string->symbol (read-line))])
-            (loop (cdr criteria)
-                  (filter-by-region filtered-data region)))]
-         ['genre
-          (printf "Enter the genre: ")
-          (let ([genre (read-line)])
-            (loop (cdr criteria)
-                  (filter-by-genre filtered-data genre)))])])))
+(define (filter-from-criteria search-list games)
+  (if (null? search-list) nothing
+      (let loop ([search-by search-list]
+                 [filt-games games]
+                 [region '()])
+        (cond
+          [(null? search-by) (display-filtered filt-games region)]
+          [(equal? (first search-by) "Name")
+           (loop (rest (cdr search-by)) (filter-by-name filt-games (second search-by)) region)]
+          [(equal? (first search-by) "Date")
+           (loop (rest (cdr search-by)) (filter-by-date filt-games (second search-by)) region)]
+          [(equal? (first search-by) "Publisher")
+           (loop (rest (cdr search-by)) (filter-by-publisher filt-games (second search-by)) region)]
+          [(equal? (first search-by) "Region")
+           (loop (rest (cdr search-by)) filt-games (second search-by))]
+          [(equal? (first search-by) "Genre")
+           (loop (rest (cdr search-by)) (filter-by-genre filt-games (second search-by)) region)]
+          ))))
 
-; Display filtered results
-(define (display-results filtered-data)
-  (printf "Sort results by 'rank' or 'review'? ")
-  (let ([sort-choice (string->symbol (read-line))])
-    (cond
-      [(eq? sort-choice 'rank)
-       (for-each (lambda (row)
-                   (printf "~a, ~a, ~a, ~a, ~a, ~a, ~a, ~a\n"
-                           (list-ref row 1) ; Rank
-                           (list-ref row 2) ; Game Title
-                           (list-ref row 3) ; Platform
-                           (list-ref row 4) ; Year
-                           (list-ref row 5) ; Genre
-                           (list-ref row 6) ; Publisher
-                           (list-ref row 11) ; Global
-                           (list-ref row 12))) ; Review
-                 (sort-by-rank filtered-data))]
-      [(eq? sort-choice 'review)
-       (for-each (lambda (row)
-                   (printf "~a, ~a, ~a, ~a, ~a, ~a, ~a, ~a\n"
-                           (list-ref row 1)
-                           (list-ref row 2)
-                           (list-ref row 3)
-                           (list-ref row 4)
-                           (list-ref row 5)
-                           (list-ref row 6)
-                           (list-ref row 11)
-                           (list-ref row 12)))
-                 (sort-by-review filtered-data))]
-      [else (printf "Invalid sort choice. Displaying unsorted results.\n")
-            (for-each (lambda (row)
-                        (printf "~a, ~a, ~a, ~a, ~a, ~a, ~a, ~a\n"
-                                (list-ref row 1)
-                                (list-ref row 2)
-                                (list-ref row 3)
-                                (list-ref row 4)
-                                (list-ref row 5)
-                                (list-ref row 6)
-                                (list-ref row 11)
-                                (list-ref row 12)))
-                      filtered-data)])))
+(define path "sales.csv")
+(define games-reader (make-csv-reader-maker '((strip-leading-whitespace? . #t)
+                                              (strip-trailing-whitespace? . #t))))
+(define games-list (csv->list (games-reader (open-input-file path))))
 
-; Main function
-(define (main)
-  (let loop ()
-    (let ([criteria (menu)])
-      (unless (null? criteria)
-        (let ([filtered-data (filter-data criteria)])
-          (unless (null? filtered-data)
-            (display-results filtered-data)))))
-    (printf "Enter 'q' to quit or any other key to continue: ")
-    (let ([choice (read-line)])
-      (unless (string-ci=? choice "q")
-        (loop)))))
-
-; Run the main function
-(main)
+(let loop ([results (filter-from-criteria (menu) games-list)])
+  (if (equal? results nothing) (display "\nGoodbye...") (loop (filter-from-criteria (menu) games-list))))
