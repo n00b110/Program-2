@@ -9,12 +9,13 @@
 (define (filter-by-name data game-name)
   (filter (lambda (row)
             (regexp-match? (regexp (string-ci=? game-name))
-                           (list-ref row 2)))
+                           (string-ci=? (list-ref row 2))))
           data))
 
 (define (filter-by-date data start-year end-year)
   (filter (lambda (row)
             (let ([year (string->number (list-ref row 4))])
+              (displayln year)
               (and (>= year start-year)
                    (<= year end-year))))
           data))
@@ -22,7 +23,7 @@
 (define (filter-by-publisher data publisher)
   (filter (lambda (row)
             (regexp-match? (regexp (string-ci=? publisher))
-                           (list-ref row 6)))
+                           (string-ci=? (list-ref row 6))))
           data))
 
 (define (filter-by-region data region)
